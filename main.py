@@ -134,12 +134,18 @@ async def start_with_ref(message: Message, command):
 
     points = get_points(user_id)
 
-    await message.answer(
-        f"✅ Xush kelibsiz!\n\n"
-        f"👥 Referal linkingiz:\n{referral_link}\n\n"
-        f"⭐ Ballingiz: {points}",
-        reply_markup=menu_keyboard()
-    )
+   await message.answer(
+    f"🎉 Aksiyada ishtirok etib sovg‘aga ega bo‘ling!\n\n"
+    f"📢 Quyidagi maxsus linkingiz orqali "
+    f"yaqinlaringizni botga taklif qiling va "
+    f"har bir a’zo uchun 5 ball qo‘lga kiriting.\n\n"
+    f"🏆 Eng ko‘p ball to‘plagan "
+    f"ishtirokchi sovg‘a egasiga aylanadi!\n\n"
+    f"🔗 Sizning maxsus linkingiz:\n"
+    f"{referral_link}\n\n"
+    f"⭐ Jami ballaringiz: {points}",
+    reply_markup=menu_keyboard()
+)
 
 
 @dp.message(CommandStart())
