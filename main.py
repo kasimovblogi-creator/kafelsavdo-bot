@@ -1,6 +1,18 @@
-Mana to‘liq yangilangan `main.py`. Eski kodni butunlay o‘chirib, shu kodni qo‘ying. Adminga yangi foydalanuvchi soni ham yuboriladi.
+Mana to‘liq tayyor `main.py`. Eski kodni to‘liq o‘chirib, shu kodni qo‘ying.
 
-```python
+Bu kodda:
+
+* referral
+* ball tizimi
+* TOP users
+* admin notification
+* user soni
+* kanalga obuna tekshirish
+* groupdagi “joined/left” xabarlarini o‘chirish
+
+hammasi bor.
+
+```python id="p9v4mk"
 import asyncio
 import os
 
@@ -70,7 +82,11 @@ async def check_subscription(user_id):
     try:
         member = await bot.get_chat_member(CHANNEL, user_id)
 
-        if member.status in ["member", "administrator", "creator"]:
+        if member.status in [
+            "member",
+            "administrator",
+            "creator"
+        ]:
             return True
 
     except:
@@ -90,16 +106,14 @@ async def start_ref(message: Message, command):
     except:
         referrer_id = None
 
+    users[user_id] = username
+
     if referrer_id and user_id != referrer_id:
 
-        if user_id not in users:
+        if referrer_id not in points_db:
+            points_db[referrer_id] = 0
 
-            users[user_id] = username
-
-            if referrer_id not in points_db:
-                points_db[referrer_id] = 0
-
-            points_db[referrer_id] += 5
+        points_db[referrer_id] += 5
 
     is_subscribed = await check_subscription(user_id)
 
@@ -113,7 +127,8 @@ async def start_ref(message: Message, command):
     bot_info = await bot.get_me()
 
     referral_link = (
-        f"https://t.me/{bot_info.username}?start={user_id}"
+        f"https://t.me/"
+        f"{bot_info.username}?start={user_id}"
     )
 
     points = points_db.get(user_id, 0)
@@ -147,7 +162,7 @@ async def start_handler(message: Message):
         f"👤 Yangi user kirdi!\n\n"
         f"🆔 ID: {user_id}\n"
         f"👤 Username: @{username}\n\n"
-        f"📊 Jami foydalanuvchilar soni: {total_users}"
+        f"📊 Jami foydalanuvchilar: {total_users}"
     )
 
     is_subscribed = await check_subscription(user_id)
@@ -162,7 +177,8 @@ async def start_handler(message: Message):
     bot_info = await bot.get_me()
 
     referral_link = (
-        f"https://t.me/{bot_info.username}?start={user_id}"
+        f"https://t.me/"
+        f"{bot_info.username}?start={user_id}"
     )
 
     points = points_db.get(user_id, 0)
@@ -205,7 +221,10 @@ async def check_sub(callback: CallbackQuery):
 @dp.callback_query(F.data == "my_points")
 async def my_points(callback: CallbackQuery):
 
-    points = points_db.get(callback.from_user.id, 0)
+    points = points_db.get(
+        callback.from_user.id,
+        0
+    )
 
     await callback.message.answer(
         f"⭐ Sizning ballaringiz: {points}"
@@ -223,7 +242,13 @@ async def top_users(callback: CallbackQuery):
         reverse=True
     )[:5]
 
-    medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
+    medals = [
+        "🥇",
+        "🥈",
+        "🥉",
+        "4️⃣",
+        "5️⃣"
+    ]
 
     text = "🏆 TOP Referralchilar:\n\n"
 
@@ -232,16 +257,30 @@ async def top_users(callback: CallbackQuery):
         user_id = user[0]
         points = user[1]
 
-        username = users.get(user_id, "NoName")
+        username = users.get(
+            user_id,
+            "NoName"
+        )
 
         text += (
             f"{medals[index]} "
-            f"@{username} — ⭐ {points} ball\n"
+            f"@{username} "
+            f"— ⭐ {points} ball\n"
         )
 
     await callback.message.answer(text)
 
     await callback.answer()
+
+
+@dp.message()
+async def delete_service_messages(message: Message):
+
+    if (
+        message.new_chat_members
+        or message.left_chat_member
+    ):
+        await message.delete()
 
 
 async def main():
