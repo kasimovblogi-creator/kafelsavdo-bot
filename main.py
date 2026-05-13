@@ -1,3 +1,6 @@
+Mana to‘liq yangilangan `main.py`. Eski kodni butunlay o‘chirib, shu kodni qo‘ying. Adminga yangi foydalanuvchi soni ham yuboriladi.
+
+```python
 import asyncio
 import os
 
@@ -82,9 +85,12 @@ async def start_ref(message: Message, command):
     user_id = message.from_user.id
     username = message.from_user.username
 
-    referrer_id = int(command.args)
+    try:
+        referrer_id = int(command.args)
+    except:
+        referrer_id = None
 
-    if user_id != referrer_id:
+    if referrer_id and user_id != referrer_id:
 
         if user_id not in users:
 
@@ -134,11 +140,14 @@ async def start_handler(message: Message):
 
     users[user_id] = username
 
+    total_users = len(users)
+
     await bot.send_message(
         ADMIN_ID,
-        f"👤 Yangi user:\n\n"
-        f"🆔 {user_id}\n"
-        f"👤 @{username}"
+        f"👤 Yangi user kirdi!\n\n"
+        f"🆔 ID: {user_id}\n"
+        f"👤 Username: @{username}\n\n"
+        f"📊 Jami foydalanuvchilar soni: {total_users}"
     )
 
     is_subscribed = await check_subscription(user_id)
@@ -244,3 +253,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+```
