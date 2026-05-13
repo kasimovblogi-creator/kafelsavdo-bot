@@ -2,7 +2,7 @@ import asyncio
 import os
 
 from aiogram import Bot, Dispatcher, F
-from aiogram.filters import CommandStart, Command
+from aiogram.filters import CommandStart
 from aiogram.types import (
     Message,
     CallbackQuery,
@@ -11,15 +11,6 @@ from aiogram.types import (
 )
 
 from dotenv import load_dotenv
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-
-from database import (
-    add_user,
-    add_points,
-    get_points,
-    get_top_users,
-    get_all_users
-)
 
 load_dotenv()
 
@@ -30,49 +21,46 @@ ADMIN_ID = int(os.getenv("ADMIN_ID"))
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-broadcast_mode = False
-
-scheduler = AsyncIOScheduler()
+users = {}
+points_db = {}
 
 
 def subscribe_keyboard():
-    keyboard = InlineKeyboardMarkup(
+    return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="📢 Gruppaga qo‘shilish",
-                    url=f"https://t.me/{CHANNEL.replace('@', '')}",
+                    text="📢 Kanalga qo‘shilish",
+                    url=f"https://t.me/{CHANNEL.replace('@', '')}"
                 )
             ],
             [
                 InlineKeyboardButton(
                     text="✅ Tekshirish",
-                    callback_data="check_sub",
-                )
-            ],
-        ]
-    )
-    return keyboard
-
-
-def menu_keyboard():
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="⭐ Ballarim",
-                    callback_data="my_points",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="🏆 TOP 5",
-                    callback_data="top_users",
+                    callback_data="check_sub"
                 )
             ]
         ]
     )
-    return keyboard
+
+
+def menu_keyboard():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="⭐ Ballarim",
+                    callback_data="my_points"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🏆 TOP",
+                    callback_data="top_users"
+                )
+            ]
+        ]
+    )
 
 
 async def check_subscription(user_id):
@@ -89,7 +77,7 @@ async def check_subscription(user_id):
 
 
 @dp.message(CommandStart(deep_link=True))
-async def start_with_ref(message: Message, command):
+async def start_ref(message: Message, command):
 
     user_id = message.from_user.id
     username = message.from_user.username
@@ -98,54 +86,44 @@ async def start_with_ref(message: Message, command):
 
     if user_id != referrer_id:
 
-        new_user = add_user(
-            user_id,
-            username,
-            referrer_id
-        )
+        if user_id not in users:
 
-        if new_user:
+            users[user_id] = username
 
-            await bot.send_message(
-                ADMIN_ID,
-                f"👤 Yangi user referral orqali kirdi:\n\n"
-                f"🆔 ID: {user_id}\n"
-                f"👤 Username: @{username}\n"
-                f"👥 Refer: {referrer_id}"
-            )
+            if referrer_id not in points_db:
+                points_db[referrer_id] = 0
 
-            add_points(referrer_id, 5)
+            points_db[referrer_id] += 5
 
     is_subscribed = await check_subscription(user_id)
 
     if not is_subscribed:
         await message.answer(
-            "❌ Avval gruppaga qo‘shiling.",
-            reply_markup=subscribe_keyboard(),
+            "❌ Avval kanalga qo‘shiling.",
+            reply_markup=subscribe_keyboard()
         )
         return
 
     bot_info = await bot.get_me()
 
     referral_link = (
-        f"https://t.me/{bot_info.username}"
-        f"?start={user_id}"
+        f"https://t.me/{bot_info.username}?start={user_id}"
     )
 
-    points = get_points(user_id)
+    points = points_db.get(user_id, 0)
 
-   await message.answer(
-    f"🎉 Aksiyada ishtirok etib sovg‘aga ega bo‘ling!\n\n"
-    f"📢 Quyidagi maxsus linkingiz orqali "
-    f"yaqinlaringizni botga taklif qiling va "
-    f"har bir a’zo uchun 5 ball qo‘lga kiriting.\n\n"
-    f"🏆 Eng ko‘p ball to‘plagan "
-    f"ishtirokchi sovg‘a egasiga aylanadi!\n\n"
-    f"🔗 Sizning maxsus linkingiz:\n"
-    f"{referral_link}\n\n"
-    f"⭐ Jami ballaringiz: {points}",
-    reply_markup=menu_keyboard()
-)
+    await message.answer(
+        f"🎉 Aksiyada ishtirok etib sovg‘aga ega bo‘ling!\n\n"
+        f"📢 Quyidagi maxsus linkingiz orqali "
+        f"yaqinlaringizni botga taklif qiling va "
+        f"har bir a’zo uchun 5 ball qo‘lga kiriting.\n\n"
+        f"🏆 Eng ko‘p ball to‘plagan "
+        f"ishtirokchi sovg‘a egasiga aylanadi!\n\n"
+        f"🔗 Sizning maxsus linkingiz:\n"
+        f"{referral_link}\n\n"
+        f"⭐ Jami ballaringiz: {points}",
+        reply_markup=menu_keyboard()
+    )
 
 
 @dp.message(CommandStart())
@@ -154,55 +132,57 @@ async def start_handler(message: Message):
     user_id = message.from_user.id
     username = message.from_user.username
 
-    new_user = add_user(
-        user_id,
-        username
+    users[user_id] = username
+
+    await bot.send_message(
+        ADMIN_ID,
+        f"👤 Yangi user:\n\n"
+        f"🆔 {user_id}\n"
+        f"👤 @{username}"
     )
-
-    if new_user:
-
-        await bot.send_message(
-            ADMIN_ID,
-            f"👤 Yangi user kirdi:\n\n"
-            f"🆔 ID: {user_id}\n"
-            f"👤 Username: @{username}"
-        )
 
     is_subscribed = await check_subscription(user_id)
 
     if not is_subscribed:
         await message.answer(
-            "❌ Avval gruppaga qo‘shiling.",
-            reply_markup=subscribe_keyboard(),
+            "❌ Avval kanalga qo‘shiling.",
+            reply_markup=subscribe_keyboard()
         )
         return
 
     bot_info = await bot.get_me()
 
     referral_link = (
-        f"https://t.me/{bot_info.username}"
-        f"?start={user_id}"
+        f"https://t.me/{bot_info.username}?start={user_id}"
     )
 
-    points = get_points(user_id)
+    points = points_db.get(user_id, 0)
 
     await message.answer(
-        f"✅ Xush kelibsiz!\n\n"
-        f"👥 Referal linkingiz:\n{referral_link}\n\n"
-        f"⭐ Ballingiz: {points}",
+        f"🎉 Aksiyada ishtirok etib sovg‘aga ega bo‘ling!\n\n"
+        f"📢 Quyidagi maxsus linkingiz orqali "
+        f"yaqinlaringizni botga taklif qiling va "
+        f"har bir a’zo uchun 5 ball qo‘lga kiriting.\n\n"
+        f"🏆 Eng ko‘p ball to‘plagan "
+        f"ishtirokchi sovg‘a egasiga aylanadi!\n\n"
+        f"🔗 Sizning maxsus linkingiz:\n"
+        f"{referral_link}\n\n"
+        f"⭐ Jami ballaringiz: {points}",
         reply_markup=menu_keyboard()
     )
 
 
 @dp.callback_query(F.data == "check_sub")
-async def check_sub_callback(callback: CallbackQuery):
+async def check_sub(callback: CallbackQuery):
 
-    is_subscribed = await check_subscription(callback.from_user.id)
+    is_subscribed = await check_subscription(
+        callback.from_user.id
+    )
 
     if not is_subscribed:
         await callback.answer(
-            "❌ Siz hali gruppaga qo‘shilmagansiz.",
-            show_alert=True,
+            "❌ Siz hali kanalga qo‘shilmagansiz.",
+            show_alert=True
         )
         return
 
@@ -214,9 +194,9 @@ async def check_sub_callback(callback: CallbackQuery):
 
 
 @dp.callback_query(F.data == "my_points")
-async def my_points_callback(callback: CallbackQuery):
+async def my_points(callback: CallbackQuery):
 
-    points = get_points(callback.from_user.id)
+    points = points_db.get(callback.from_user.id, 0)
 
     await callback.message.answer(
         f"⭐ Sizning ballaringiz: {points}"
@@ -226,28 +206,28 @@ async def my_points_callback(callback: CallbackQuery):
 
 
 @dp.callback_query(F.data == "top_users")
-async def top_users_callback(callback: CallbackQuery):
+async def top_users(callback: CallbackQuery):
 
-    top_users = get_top_users()
+    sorted_users = sorted(
+        points_db.items(),
+        key=lambda x: x[1],
+        reverse=True
+    )[:5]
 
     medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
 
-    text = "🏆 TOP 5 Referralchilar:\n\n"
+    text = "🏆 TOP Referralchilar:\n\n"
 
-    for index, user in enumerate(top_users):
+    for index, user in enumerate(sorted_users):
 
-        username = user[0]
+        user_id = user[0]
         points = user[1]
 
-        if username:
-            username_text = f"@{username}"
-        else:
-            username_text = "Username yo‘q"
+        username = users.get(user_id, "NoName")
 
         text += (
             f"{medals[index]} "
-            f"{username_text} "
-            f"— ⭐ {points} ball\n"
+            f"@{username} — ⭐ {points} ball\n"
         )
 
     await callback.message.answer(text)
@@ -255,98 +235,9 @@ async def top_users_callback(callback: CallbackQuery):
     await callback.answer()
 
 
-@dp.message(Command("reklama"))
-async def reklama_command(message: Message):
-
-    global broadcast_mode
-
-    if message.from_user.id != ADMIN_ID:
-        return
-
-    broadcast_mode = True
-
-    await message.answer(
-        "📢 Reklama xabarini yuboring."
-    )
-
-
-@dp.message()
-async def broadcast_handler(message: Message):
-
-    global broadcast_mode
-
-    if not broadcast_mode:
-        return
-
-    if message.from_user.id != ADMIN_ID:
-        return
-
-    users = get_all_users()
-
-    success = 0
-
-    for user in users:
-
-        user_id = user[0]
-
-        try:
-            await message.copy_to(user_id)
-            success += 1
-
-        except:
-            pass
-
-    broadcast_mode = False
-
-    await message.answer(
-        f"✅ Reklama yuborildi.\n\n"
-        f"👥 Yuborildi: {success}"
-    )
-
-
-async def weekly_top():
-
-    top_users = get_top_users()
-
-    medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
-
-    text = "🏆 Haftalik TOP Referralchilar:\n\n"
-
-    for index, user in enumerate(top_users):
-
-        username = user[0]
-        points = user[1]
-
-        if username:
-            username_text = f"@{username}"
-        else:
-            username_text = "Username yo‘q"
-
-        text += (
-            f"{medals[index]} "
-            f"{username_text} "
-            f"— ⭐ {points} ball\n"
-        )
-
-    await bot.send_message(
-        ADMIN_ID,
-        text
-    )
-
-
 async def main():
 
-    scheduler.add_job(
-        weekly_top,
-        trigger="cron",
-        day_of_week="sun",
-        hour=20,
-        minute=0
-    )
-
-    scheduler.start()
-
-    print("Bot ishga tushdi...")
+    print("Bot ishga tushdi ✅")
 
     await dp.start_polling(bot)
 
