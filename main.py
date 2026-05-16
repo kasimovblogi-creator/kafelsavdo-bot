@@ -1,18 +1,4 @@
-Mana to‘liq tayyor `main.py`. Eski kodni to‘liq o‘chirib, shu kodni qo‘ying.
 
-Bu kodda:
-
-* referral
-* ball tizimi
-* TOP users
-* admin notification
-* user soni
-* kanalga obuna tekshirish
-* groupdagi “joined/left” xabarlarini o‘chirish
-
-hammasi bor.
-
-```python id="p9v4mk"
 import asyncio
 import os
 
