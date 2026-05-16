@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import sqlite3
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import CommandStart
@@ -29,18 +30,28 @@ ADMIN_ID = int(os.getenv("ADMIN_ID"))
 logging.basicConfig(level=logging.INFO)
 
 # =========================
+# DATABASE
+# =========================
+
+conn = sqlite3.connect("database.db")
+cursor = conn.cursor()
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS users (
+    user_id INTEGER PRIMARY KEY,
+    username TEXT,
+    points INTEGER DEFAULT 0
+)
+""")
+
+conn.commit()
+
+# =========================
 # BOT
 # =========================
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
-
-# =========================
-# DATABASE
-# =========================
-
-users = {}
-points_db = {}
 
 # =========================
 # KEYBOARDS
@@ -84,6 +95,63 @@ def menu_keyboard():
     )
 
 # =========================
+# DATABASE FUNCTIONS
+# =========================
+
+def add_user(user_id, username):
+
+    cursor.execute(
+        "SELECT * FROM users WHERE user_id = ?",
+        (user_id,)
+    )
+
+    user = cursor.fetchone()
+
+    if not user:
+        cursor.execute(
+            "INSERT INTO users (user_id, username, points) VALUES (?, ?, ?)",
+            (user_id, username, 0)
+        )
+        conn.commit()
+
+
+def add_points(user_id, points):
+
+    cursor.execute(
+        "UPDATE users SET points = points + ? WHERE user_id = ?",
+        (points, user_id)
+    )
+
+    conn.commit()
+
+
+def get_points(user_id):
+
+    cursor.execute(
+        "SELECT points FROM users WHERE user_id = ?",
+        (user_id,)
+    )
+
+    result = cursor.fetchone()
+
+    if result:
+        return result[0]
+
+    return 0
+
+
+def get_top_users():
+
+    cursor.execute("""
+    SELECT username, points
+    FROM users
+    ORDER BY points DESC
+    LIMIT 5
+    """)
+
+    return cursor.fetchall()
+
+# =========================
 # CHECK SUB
 # =========================
 
@@ -102,11 +170,11 @@ async def check_subscription(user_id):
         ]
 
     except Exception as e:
-        print(f"Subscription error: {e}")
+        print(e)
         return False
 
 # =========================
-# START WITH REF
+# START REFERRAL
 # =========================
 
 @dp.message(CommandStart(deep_link=True))
@@ -115,7 +183,7 @@ async def start_ref(message: Message, command):
     user_id = message.from_user.id
     username = message.from_user.username or "NoUsername"
 
-    users[user_id] = username
+    add_user(user_id, username)
 
     try:
         referrer_id = int(command.args)
@@ -124,18 +192,17 @@ async def start_ref(message: Message, command):
 
     if referrer_id and referrer_id != user_id:
 
-        if referrer_id not in points_db:
-            points_db[referrer_id] = 0
-
-        points_db[referrer_id] += 5
+        add_points(referrer_id, 5)
 
     is_subscribed = await check_subscription(user_id)
 
     if not is_subscribed:
+
         await message.answer(
             "❌ Avval kanalga qo‘shiling.",
             reply_markup=subscribe_keyboard()
         )
+
         return
 
     bot_info = await bot.get_me()
@@ -144,15 +211,11 @@ async def start_ref(message: Message, command):
         f"https://t.me/{bot_info.username}?start={user_id}"
     )
 
-    points = points_db.get(user_id, 0)
+    points = get_points(user_id)
 
     await message.answer(
-        f"🎉 Aksiyada ishtirok etib sovg‘aga ega bo‘ling!\n\n"
-        f"📢 Quyidagi linkingiz orqali "
-        f"yaqinlaringizni taklif qiling.\n\n"
-        f"👥 Har bir odam uchun: 5 ball\n"
-        f"🏆 Eng ko‘p ball yig‘gan odam sovg‘a oladi.\n\n"
-        f"🔗 Sizning linkingiz:\n"
+        f"🎉 Referral tizimiga xush kelibsiz!\n\n"
+        f"🔗 Sizning referral linkingiz:\n"
         f"{referral_link}\n\n"
         f"⭐ Ballaringiz: {points}",
         reply_markup=menu_keyboard()
@@ -168,9 +231,11 @@ async def start_handler(message: Message):
     user_id = message.from_user.id
     username = message.from_user.username or "NoUsername"
 
-    users[user_id] = username
+    add_user(user_id, username)
 
-    total_users = len(users)
+    cursor.execute("SELECT COUNT(*) FROM users")
+
+    total_users = cursor.fetchone()[0]
 
     try:
         await bot.send_message(
@@ -186,10 +251,12 @@ async def start_handler(message: Message):
     is_subscribed = await check_subscription(user_id)
 
     if not is_subscribed:
+
         await message.answer(
             "❌ Avval kanalga qo‘shiling.",
             reply_markup=subscribe_keyboard()
         )
+
         return
 
     bot_info = await bot.get_me()
@@ -198,10 +265,10 @@ async def start_handler(message: Message):
         f"https://t.me/{bot_info.username}?start={user_id}"
     )
 
-    points = points_db.get(user_id, 0)
+    points = get_points(user_id)
 
     await message.answer(
-        f"🎉 Aksiyada ishtirok eting!\n\n"
+        f"🎉 Xush kelibsiz!\n\n"
         f"🔗 Sizning referral linkingiz:\n"
         f"{referral_link}\n\n"
         f"⭐ Ballaringiz: {points}",
@@ -209,7 +276,7 @@ async def start_handler(message: Message):
     )
 
 # =========================
-# CHECK BUTTON
+# CHECK SUB
 # =========================
 
 @dp.callback_query(F.data == "check_sub")
@@ -220,10 +287,12 @@ async def check_sub(callback: CallbackQuery):
     )
 
     if not is_subscribed:
+
         await callback.answer(
             "❌ Siz hali kanalga qo‘shilmagansiz",
             show_alert=True
         )
+
         return
 
     await callback.message.answer(
@@ -239,10 +308,7 @@ async def check_sub(callback: CallbackQuery):
 @dp.callback_query(F.data == "my_points")
 async def my_points(callback: CallbackQuery):
 
-    points = points_db.get(
-        callback.from_user.id,
-        0
-    )
+    points = get_points(callback.from_user.id)
 
     await callback.message.answer(
         f"⭐ Sizning ballaringiz: {points}"
@@ -257,28 +323,19 @@ async def my_points(callback: CallbackQuery):
 @dp.callback_query(F.data == "top_users")
 async def top_users(callback: CallbackQuery):
 
-    sorted_users = sorted(
-        points_db.items(),
-        key=lambda x: x[1],
-        reverse=True
-    )[:5]
+    top = get_top_users()
 
     medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
 
-    text = "🏆 TOP referralchilar:\n\n"
+    text = "🏆 TOP Referralchilar:\n\n"
 
-    if not sorted_users:
+    if not top:
         text += "Hozircha userlar yo‘q"
 
-    for index, user in enumerate(sorted_users):
+    for index, user in enumerate(top):
 
-        user_id = user[0]
+        username = user[0]
         points = user[1]
-
-        username = users.get(
-            user_id,
-            "NoName"
-        )
 
         text += (
             f"{medals[index]} "
@@ -315,12 +372,14 @@ async def main():
 
     print("✅ Bot ishga tushdi")
 
-    await bot.delete_webhook(drop_pending_updates=True)
+    await bot.delete_webhook(
+        drop_pending_updates=True
+    )
 
     await dp.start_polling(bot)
 
 # =========================
-# START
+# RUN
 # =========================
 
 if __name__ == "__main__":
